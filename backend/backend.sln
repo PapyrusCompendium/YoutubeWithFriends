@@ -5,6 +5,13 @@ VisualStudioVersion = 16.0.30114.105
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "YoutubeWithFriends.Api", "YoutubeWithFriends.Api\YoutubeWithFriends.Api.csproj", "{2DE57175-4A20-4DF8-BBC5-CD71C0A5CC90}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "YoutubeWithFriends.Db", "YoutubeWithFriends.Db\YoutubeWithFriends.Db.csproj", "{F2A4C1F9-C5D4-443E-A36D-9BDDF1112AC9}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{6FD5CE6B-2F35-4B29-9113-CA5C52F9513C}"
+	ProjectSection(SolutionItems) = preProject
+		.editorconfig = .editorconfig
+	EndProjectSection
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -27,6 +34,18 @@ Global
 		{2DE57175-4A20-4DF8-BBC5-CD71C0A5CC90}.Release|x64.Build.0 = Release|Any CPU
 		{2DE57175-4A20-4DF8-BBC5-CD71C0A5CC90}.Release|x86.ActiveCfg = Release|Any CPU
 		{2DE57175-4A20-4DF8-BBC5-CD71C0A5CC90}.Release|x86.Build.0 = Release|Any CPU
+		{F2A4C1F9-C5D4-443E-A36D-9BDDF1112AC9}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F2A4C1F9-C5D4-443E-A36D-9BDDF1112AC9}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F2A4C1F9-C5D4-443E-A36D-9BDDF1112AC9}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{F2A4C1F9-C5D4-443E-A36D-9BDDF1112AC9}.Debug|x64.Build.0 = Debug|Any CPU
+		{F2A4C1F9-C5D4-443E-A36D-9BDDF1112AC9}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{F2A4C1F9-C5D4-443E-A36D-9BDDF1112AC9}.Debug|x86.Build.0 = Debug|Any CPU
+		{F2A4C1F9-C5D4-443E-A36D-9BDDF1112AC9}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F2A4C1F9-C5D4-443E-A36D-9BDDF1112AC9}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F2A4C1F9-C5D4-443E-A36D-9BDDF1112AC9}.Release|x64.ActiveCfg = Release|Any CPU
+		{F2A4C1F9-C5D4-443E-A36D-9BDDF1112AC9}.Release|x64.Build.0 = Release|Any CPU
+		{F2A4C1F9-C5D4-443E-A36D-9BDDF1112AC9}.Release|x86.ActiveCfg = Release|Any CPU
+		{F2A4C1F9-C5D4-443E-A36D-9BDDF1112AC9}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
