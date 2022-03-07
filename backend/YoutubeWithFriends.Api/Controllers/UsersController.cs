@@ -1,93 +1,71 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Threading.Tasks;
 
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
 using YoutubeWithFriends.Api.Data;
+using YoutubeWithFriends.Db;
 using YoutubeWithFriends.Db.Models;
 
 namespace YoutubeWithFriends.Api.Controllers {
     [Route("api/[controller]")]
     [ApiController]
     public class UsersController : ControllerBase {
-        private readonly DbApiContext _context;
+        private readonly ISimpleDbContextFactory _simpleDbContextFactory;
 
-        public UsersController(DbApiContext context) {
-            _context = context;
+        public UsersController(ISimpleDbContextFactory simpleDbContextFactory) {
+            _simpleDbContextFactory = simpleDbContextFactory;
         }
 
-        // GET: api/Users
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<User>>> GetUsers() {
-            return await _context.Users.ToListAsync();
+        public async Task<ActionResult<string>> GetUsers(string sessionId) {
+            var context = _simpleDbContextFactory.CreateContext<DbApiContext>();
+            var userSession = await context.Users.FirstOrDefaultAsync(i => i.SessionID == sessionId);
+
+            return userSession is null
+                ? NotFound()
+                : userSession.Username;
         }
 
-        // GET: api/Users/5
-        [HttpGet("{id}")]
-        public async Task<ActionResult<User>> GetUser(Guid id) {
-            var user = await _context.Users.FindAsync(id);
-
-            if (user == null) {
-                return NotFound();
-            }
-
-            return user;
-        }
-
-        // PUT: api/Users/5
-        // To protect from overposting attacks, see https://go.microsoft.com/fwlink/?linkid=2123754
-        [HttpPut("{id}")]
-        public async Task<IActionResult> PutUser(Guid id, User user) {
-            if (id != user.ID) {
-                return BadRequest();
-            }
-
-            _context.Entry(user).State = EntityState.Modified;
-
-            try {
-                await _context.SaveChangesAsync();
-            }
-            catch (DbUpdateConcurrencyException) {
-                if (!UserExists(id)) {
-                    return NotFound();
-                }
-                else {
-                    throw;
-                }
-            }
-
-            return NoContent();
-        }
-
-        // POST: api/Users
-        // To protect from overposting attacks, see https://go.microsoft.com/fwlink/?linkid=2123754
         [HttpPost]
-        public async Task<ActionResult<User>> PostUser(User user) {
-            _context.Users.Add(user);
-            await _context.SaveChangesAsync();
+        public async Task<ActionResult<string>> CreateUser(string username) {
+            var context = _simpleDbContextFactory.CreateContext<DbApiContext>();
+            var existingUser = await context.Users.FirstOrDefaultAsync(i => i.Username == username);
 
-            return CreatedAtAction("GetUser", new { id = user.ID }, user);
-        }
-
-        // DELETE: api/Users/5
-        [HttpDelete("{id}")]
-        public async Task<IActionResult> DeleteUser(Guid id) {
-            var user = await _context.Users.FindAsync(id);
-            if (user == null) {
-                return NotFound();
+            if (existingUser is not null) {
+                return new StatusCodeResult(400);
             }
 
-            _context.Users.Remove(user);
-            await _context.SaveChangesAsync();
+            var sessionId = Guid.NewGuid().ToString();
 
-            return NoContent();
+            var user = new User {
+                Username = username,
+                SessionID = sessionId,
+                CreatedDate = DateTimeOffset.Now,
+                LastActivity = DateTimeOffset.Now,
+                ID = new Guid()
+            };
+            context.Users.Add(user);
+            context.Entry(user).State = EntityState.Added;
+
+            context.SaveChanges();
+            return Ok(sessionId);
         }
 
-        private bool UserExists(Guid id) {
-            return _context.Users.Any(e => e.ID == id);
+        [HttpDelete]
+        public async Task<ActionResult<string>> Logout(string sessionId) {
+            var context = _simpleDbContextFactory.CreateContext<DbApiContext>();
+            var userSession = await context.Users.FirstOrDefaultAsync(i => i.SessionID == sessionId);
+
+            if (userSession is null) {
+                return new StatusCodeResult(400);
+            }
+
+            context.Users.Remove(userSession);
+            await context.SaveChangesAsync();
+
+            return Ok();
         }
     }
 }

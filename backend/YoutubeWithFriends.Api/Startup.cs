@@ -1,12 +1,14 @@
-﻿using Microsoft.AspNetCore.Builder;
+﻿using System;
+
+using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.OpenApi.Models;
-using Microsoft.EntityFrameworkCore;
-using YoutubeWithFriends.Api.Data;
-using System;
+
+using YoutubeWithFriends.Db;
 
 namespace YoutubeWithFriends.Api {
     public class Startup {
@@ -22,8 +24,9 @@ namespace YoutubeWithFriends.Api {
             services.AddSwaggerGen(options =>
                 options.SwaggerDoc("v1", new OpenApiInfo { Title = "YoutubeWithFriends.Api", Version = "v1" }));
 
-            services.AddDbContext<DbApiContext>(options =>
-                options.UseInMemoryDatabase($"Session-{Guid.NewGuid()}"));
+            var dbInstanceId = Guid.NewGuid();
+            services.AddSingleton<ISimpleDbContextFactory>(new SimpleDbContextFactory(options =>
+                options.UseInMemoryDatabase($"MemoryDatabase-{dbInstanceId}")));
         }
 
         public void Configure(IApplicationBuilder app, IWebHostEnvironment env) {

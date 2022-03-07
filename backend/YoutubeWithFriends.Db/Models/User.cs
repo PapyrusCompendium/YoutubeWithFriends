@@ -18,6 +18,9 @@ namespace YoutubeWithFriends.Db.Models {
 
         [Required]
         public DateTimeOffset CreatedDate { get; set; }
+
+        [Required]
+        public DateTimeOffset LastActivity { get; set; }
     }
 
     public class UserConfiguration : IEntityTypeConfiguration<User> {
