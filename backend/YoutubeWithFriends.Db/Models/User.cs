@@ -21,6 +21,9 @@ namespace YoutubeWithFriends.Db.Models {
 
         [Required]
         public DateTimeOffset LastActivity { get; set; }
+
+        [Required]
+        public string IpAddress { get; set; }
     }
 
     public class UserConfiguration : IEntityTypeConfiguration<User> {
