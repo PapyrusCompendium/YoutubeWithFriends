@@ -1,11 +1,12 @@
 ﻿using System;
-using System.Linq;
 using System.Threading.Tasks;
 
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Net.Http.Headers;
 
 using YoutubeWithFriends.Api.Data;
+using YoutubeWithFriends.Api.Services;
 using YoutubeWithFriends.Db;
 using YoutubeWithFriends.Db.Models;
 
@@ -13,50 +14,52 @@ namespace YoutubeWithFriends.Api.Controllers {
     [Route("api/[controller]")]
     [ApiController]
     public class UsersController : ControllerBase {
-        private const int RATE_LIMIT_SPEED = 300;
         private const int MAX_ACCOUNTS_UNDER_IP = 5;
+        private const string USER_SESSION_ID_COOKIE_NAME = "userSessionId";
 
         private readonly ISimpleDbContextFactory _simpleDbContextFactory;
+        private readonly IIpAddressResolver _ipAddressResolver;
 
-        public UsersController(ISimpleDbContextFactory simpleDbContextFactory) {
+        public UsersController(ISimpleDbContextFactory simpleDbContextFactory, IIpAddressResolver ipAddressResolver) {
             _simpleDbContextFactory = simpleDbContextFactory;
+            _ipAddressResolver = ipAddressResolver;
         }
 
-        [HttpGet]
-        public async Task<ActionResult<string>> GetUsers(string sessionId) {
+        [HttpGet("GetUser")]
+        public async Task<ActionResult<string>> GetUser(string sessionId) {
             using var context = _simpleDbContextFactory.CreateContext<DbApiContext>();
+
+            if (string.IsNullOrWhiteSpace(sessionId)) {
+                return BadRequest();
+            }
+
             var userSession = await context.Users.FirstOrDefaultAsync(i => i.SessionID == sessionId);
 
             if (userSession is null) {
                 return NotFound();
             }
 
-            var ipAddress = GetIpAddress();
+            var ipAddress = _ipAddressResolver.GetIpAddress(Request);
             if (string.IsNullOrEmpty(ipAddress) || userSession.IpAddress != ipAddress) {
                 return BadRequest();
             }
 
-            var now = DateTimeOffset.Now;
-            if (now.Subtract(userSession.LastActivity).TotalMilliseconds < RATE_LIMIT_SPEED) {
-                return new StatusCodeResult(429);
-            }
-
-            userSession.LastActivity = now;
+            userSession.LastActivity = DateTimeOffset.Now;
             await context.SaveChangesAsync();
 
             return Ok(userSession.Username);
         }
 
-        [HttpPost]
+        [HttpPost("CreateUser")]
         public async Task<ActionResult<string>> CreateUser(string username) {
             using var context = _simpleDbContextFactory.CreateContext<DbApiContext>();
 
-            var ipAddress = GetIpAddress();
-            if (string.IsNullOrEmpty(ipAddress)) {
-                return new StatusCodeResult(500);
+            var ipAddress = _ipAddressResolver.GetIpAddress(Request);
+            if (string.IsNullOrWhiteSpace(username) || string.IsNullOrEmpty(ipAddress)) {
+                return BadRequest();
             }
 
-            var accountsUnderIp = context.Users.Count(i => i.IpAddress == ipAddress);
+            var accountsUnderIp = await context.Users.CountAsync(i => i.IpAddress == ipAddress);
             if (accountsUnderIp > MAX_ACCOUNTS_UNDER_IP) {
                 return new StatusCodeResult(500);
             }
@@ -73,48 +76,38 @@ namespace YoutubeWithFriends.Api.Controllers {
                 IpAddress = ipAddress,
                 CreatedDate = DateTimeOffset.Now,
                 LastActivity = DateTimeOffset.Now,
-                ID = new Guid()
+                ID = Guid.NewGuid()
             });
 
             await context.SaveChangesAsync();
-            return Ok(sessionId);
+
+            Response.Cookies.Append(USER_SESSION_ID_COOKIE_NAME, sessionId);
+            return Ok();
         }
 
-        [HttpDelete]
+        [HttpDelete("Logout")]
         public async Task<ActionResult<string>> Logout(string sessionId) {
             using var context = _simpleDbContextFactory.CreateContext<DbApiContext>();
+
+            if (string.IsNullOrWhiteSpace(sessionId)) {
+                return BadRequest();
+            }
 
             var userSession = await context.Users.FirstOrDefaultAsync(i => i.SessionID == sessionId);
             if (userSession is null) {
                 return new StatusCodeResult(400);
             }
 
-            var ipAddress = GetIpAddress();
+            var ipAddress = _ipAddressResolver.GetIpAddress(Request);
             if (string.IsNullOrEmpty(ipAddress) || userSession.IpAddress != ipAddress) {
                 return BadRequest();
-            }
-
-            var now = DateTimeOffset.Now;
-            if (now.Subtract(userSession.LastActivity).TotalMilliseconds < RATE_LIMIT_SPEED) {
-                return new StatusCodeResult(429);
             }
 
             context.Users.Remove(userSession);
             await context.SaveChangesAsync();
 
+            Response.Cookies.Delete(USER_SESSION_ID_COOKIE_NAME);
             return Ok();
-        }
-
-        private string GetIpAddress() {
-            if (Request.Headers["HTTP_X_FORWARDED_FOR"].FirstOrDefault() is string forwardedAddress) {
-                return forwardedAddress;
-            }
-
-            if (Request.Headers["REMOTE_ADDR"].FirstOrDefault() is string remoteAddress) {
-                return remoteAddress;
-            }
-
-            return Request.HttpContext.Connection.RemoteIpAddress.ToString();
         }
     }
 }

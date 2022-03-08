@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+﻿using System;
 using System.Linq;
 using System.Threading.Tasks;
 
@@ -6,97 +6,110 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
 using YoutubeWithFriends.Api.Data;
+using YoutubeWithFriends.Api.Services;
+using YoutubeWithFriends.Db;
 using YoutubeWithFriends.Db.Models;
 
 namespace YoutubeWithFriends.Api.Controllers {
     [Route("api/[controller]")]
     [ApiController]
     public class RoomsController : ControllerBase {
-        private readonly DbApiContext _context;
+        private const string ROOM_SESSION_ID_COOKIE_NAME = "roomSessionId",
+            COMMA_SEPERATOR = ",";
 
-        public RoomsController(DbApiContext context) {
-            _context = context;
+        private readonly ISimpleDbContextFactory _simpleDbContextFactory;
+        private readonly IIpAddressResolver _ipAddressResolver;
+
+        public RoomsController(ISimpleDbContextFactory simpleDbContextFactory, IIpAddressResolver ipAddressResolver) {
+            _simpleDbContextFactory = simpleDbContextFactory;
+            _ipAddressResolver = ipAddressResolver;
         }
 
-        // GET: api/Rooms
-        [HttpGet]
-        public async Task<ActionResult<IEnumerable<Room>>> GetRoom() {
-            return await _context.Rooms.ToListAsync();
-        }
-
-        // GET: api/Rooms/5
-        [HttpGet("{id}")]
-        public async Task<ActionResult<Room>> GetRoom(string id) {
-            var room = await _context.Rooms.FindAsync(id);
-
-            if (room == null) {
-                return NotFound();
-            }
-
-            return room;
-        }
-
-        // PUT: api/Rooms/5
-        // To protect from overposting attacks, see https://go.microsoft.com/fwlink/?linkid=2123754
-        [HttpPut("{id}")]
-        public async Task<IActionResult> PutRoom(string id, Room room) {
-            if (id != room.ID) {
+        [HttpPost("CreateRoom")]
+        public async Task<ActionResult<string>> CreateRoom(string sessionId, string roomName) {
+            if (string.IsNullOrWhiteSpace(sessionId) || string.IsNullOrWhiteSpace(roomName)) {
                 return BadRequest();
             }
 
-            _context.Entry(room).State = EntityState.Modified;
+            using var context = _simpleDbContextFactory.CreateContext<DbApiContext>();
 
-            try {
-                await _context.SaveChangesAsync();
-            }
-            catch (DbUpdateConcurrencyException) {
-                if (!RoomExists(id)) {
-                    return NotFound();
-                }
-                else {
-                    throw;
-                }
+            var ipAddress = _ipAddressResolver.GetIpAddress(Request);
+            var userSession = await context.Users.FirstOrDefaultAsync(i => i.SessionID == sessionId);
+            if (userSession is null || ipAddress != userSession.IpAddress) {
+                return BadRequest();
             }
 
-            return NoContent();
+            var ownedRoom = await context.Rooms.FirstOrDefaultAsync(i => i.RoomOwnerId == userSession.ID);
+            if (ownedRoom is not null) {
+                Response.Cookies.Append(ROOM_SESSION_ID_COOKIE_NAME, ownedRoom.ID.ToString());
+                return Ok(ownedRoom.RoomName);
+            }
+
+            var roomId = Guid.NewGuid();
+            context.Rooms.Add(new Room {
+                ID = roomId,
+                RoomName = roomName,
+                OwnerSessionId = sessionId,
+                RoomOwnerId = userSession.ID,
+                JoinedUserSessionIds = string.Empty
+            });
+
+            await context.SaveChangesAsync();
+
+            Response.Cookies.Append(ROOM_SESSION_ID_COOKIE_NAME, roomId.ToString());
+            return Ok(roomName);
         }
 
-        // POST: api/Rooms
-        // To protect from overposting attacks, see https://go.microsoft.com/fwlink/?linkid=2123754
-        [HttpPost]
-        public async Task<ActionResult<Room>> PostRoom(Room room) {
-            _context.Rooms.Add(room);
-            try {
-                await _context.SaveChangesAsync();
-            }
-            catch (DbUpdateException) {
-                if (RoomExists(room.ID)) {
-                    return Conflict();
-                }
-                else {
-                    throw;
-                }
+        [HttpGet("Information")]
+        public async Task<ActionResult<string>> GetRoomDetails(string roomId) {
+            if (string.IsNullOrWhiteSpace(roomId) || !Guid.TryParse(roomId, out var roomGuid)) {
+                return BadRequest();
             }
 
-            return CreatedAtAction("GetRoom", new { id = room.ID }, room);
+            using var context = _simpleDbContextFactory.CreateContext<DbApiContext>();
+
+            var roomSession = await context.Rooms
+                .Include(i => i.RoomOwner)
+                .FirstOrDefaultAsync(i => i.ID == roomGuid);
+
+            if (roomSession is null) {
+                return BadRequest();
+            }
+
+            return Ok(new {
+                roomId = roomSession.ID,
+                roomName = roomSession.RoomName,
+                roomOwner = roomSession.RoomOwner.Username,
+                roomCreated = roomSession.CreatedDate,
+                joinedUsers = roomSession.JoinedUserSessionIds.Split(COMMA_SEPERATOR),
+            });
         }
 
-        // DELETE: api/Rooms/5
-        [HttpDelete("{id}")]
-        public async Task<IActionResult> DeleteRoom(string id) {
-            var room = await _context.Rooms.FindAsync(id);
-            if (room == null) {
-                return NotFound();
+        [HttpPut("JoinRoom")]
+        public async Task<ActionResult<string>> JoinRoom(string roomId, string sessionId) {
+            if (string.IsNullOrWhiteSpace(sessionId) || string.IsNullOrWhiteSpace(roomId)
+                || !Guid.TryParse(roomId, out var roomGuid)) {
+                return BadRequest();
+            }
+            using var context = _simpleDbContextFactory.CreateContext<DbApiContext>();
+
+            var room = await context.Rooms.FirstOrDefaultAsync(i => i.ID == roomGuid);
+            if (room is null) {
+                return BadRequest();
             }
 
-            _context.Rooms.Remove(room);
-            await _context.SaveChangesAsync();
+            var userIds = room.JoinedUserSessionIds.Split(COMMA_SEPERATOR).Where(i => !string.IsNullOrWhiteSpace(i));
+            if (userIds.Contains(sessionId, StringComparer.OrdinalIgnoreCase)) {
+                return BadRequest();
+            }
 
-            return NoContent();
-        }
+            var newUsers = userIds.ToList();
+            newUsers.Add(sessionId);
+            room.JoinedUserSessionIds = string.Join(COMMA_SEPERATOR, newUsers);
+            await context.SaveChangesAsync();
 
-        private bool RoomExists(string id) {
-            return _context.Rooms.Any(e => e.ID == id);
+            Response.Cookies.Append(ROOM_SESSION_ID_COOKIE_NAME, room.ID.ToString());
+            return Ok();
         }
     }
 }

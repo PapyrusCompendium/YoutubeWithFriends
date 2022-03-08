@@ -1,5 +1,7 @@
 ﻿using System;
 
+using AspNetCoreRateLimit;
+
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.EntityFrameworkCore;
@@ -8,6 +10,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.OpenApi.Models;
 
+using YoutubeWithFriends.Api.Services;
 using YoutubeWithFriends.Db;
 
 namespace YoutubeWithFriends.Api {
@@ -19,6 +22,18 @@ namespace YoutubeWithFriends.Api {
         public IConfiguration Configuration { get; }
 
         public void ConfigureServices(IServiceCollection services) {
+            /* Start IP Rate limit config */
+
+            services.AddOptions()
+                .AddMemoryCache();
+
+            services.Configure<IpRateLimitOptions>(Configuration.GetSection("IpRateLimiting"))
+                .Configure<IpRateLimitPolicies>(Configuration.GetSection("IpRateLimitPolicies"));
+
+            services.AddInMemoryRateLimiting()
+                .AddSingleton<IRateLimitConfiguration, RateLimitConfiguration>();
+
+            /* End IP Rate limit config */
 
             services.AddControllers();
             services.AddSwaggerGen(options =>
@@ -27,6 +42,8 @@ namespace YoutubeWithFriends.Api {
             var dbInstanceId = Guid.NewGuid();
             services.AddSingleton<ISimpleDbContextFactory>(new SimpleDbContextFactory(options =>
                 options.UseInMemoryDatabase($"MemoryDatabase-{dbInstanceId}")));
+
+            services.AddSingleton<IIpAddressResolver, IpAddressResolver>();
         }
 
         public void Configure(IApplicationBuilder app, IWebHostEnvironment env) {
@@ -37,13 +54,13 @@ namespace YoutubeWithFriends.Api {
             }
 
             app.UseHttpsRedirection();
-
             app.UseRouting();
-
             app.UseAuthorization();
 
             app.UseEndpoints(endpoints =>
                 endpoints.MapControllers());
+
+            app.UseIpRateLimiting();
         }
     }
 }
