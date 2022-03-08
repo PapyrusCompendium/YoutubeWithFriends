@@ -26,8 +26,10 @@ namespace YoutubeWithFriends.Api.Controllers {
         }
 
         [HttpPost("CreateRoom")]
-        public async Task<ActionResult<string>> CreateRoom(string sessionId, string roomName) {
-            if (string.IsNullOrWhiteSpace(sessionId) || string.IsNullOrWhiteSpace(roomName)) {
+        public async Task<ActionResult<string>> CreateRoom(string roomName) {
+            var sessionId = Request.Cookies[Program.USER_SESSION_ID_COOKIE_NAME];
+
+            if (string.IsNullOrWhiteSpace(roomName) || string.IsNullOrWhiteSpace(sessionId)) {
                 return BadRequest();
             }
 
@@ -42,7 +44,7 @@ namespace YoutubeWithFriends.Api.Controllers {
             var ownedRoom = await context.Rooms.FirstOrDefaultAsync(i => i.RoomOwnerId == userSession.ID);
             if (ownedRoom is not null) {
                 Response.Cookies.Append(ROOM_SESSION_ID_COOKIE_NAME, ownedRoom.ID.ToString());
-                return Ok(ownedRoom.RoomName);
+                return Ok(new { roomId = ownedRoom.ToString(), roomName = ownedRoom.RoomName });
             }
 
             var roomId = Guid.NewGuid();
@@ -56,8 +58,7 @@ namespace YoutubeWithFriends.Api.Controllers {
 
             await context.SaveChangesAsync();
 
-            Response.Cookies.Append(ROOM_SESSION_ID_COOKIE_NAME, roomId.ToString());
-            return Ok(roomName);
+            return Ok(new { roomId = roomId.ToString(), roomName = roomName });
         }
 
         [HttpGet("Information")]
@@ -86,7 +87,9 @@ namespace YoutubeWithFriends.Api.Controllers {
         }
 
         [HttpPut("JoinRoom")]
-        public async Task<ActionResult<string>> JoinRoom(string roomId, string sessionId) {
+        public async Task<ActionResult<string>> JoinRoom(string roomId) {
+            var sessionId = Request.Cookies[Program.USER_SESSION_ID_COOKIE_NAME];
+
             if (string.IsNullOrWhiteSpace(sessionId) || string.IsNullOrWhiteSpace(roomId)
                 || !Guid.TryParse(roomId, out var roomGuid)) {
                 return BadRequest();
@@ -108,7 +111,34 @@ namespace YoutubeWithFriends.Api.Controllers {
             room.JoinedUserSessionIds = string.Join(COMMA_SEPERATOR, newUsers);
             await context.SaveChangesAsync();
 
-            Response.Cookies.Append(ROOM_SESSION_ID_COOKIE_NAME, room.ID.ToString());
+            return Ok(room.ID.ToString());
+        }
+
+        [HttpDelete("LeaveRoom")]
+        public async Task<ActionResult<string>> LeaveRoom(string roomId) {
+            var sessionId = Request.Cookies[Program.USER_SESSION_ID_COOKIE_NAME];
+
+            if (string.IsNullOrWhiteSpace(sessionId) || string.IsNullOrWhiteSpace(roomId)
+                || !Guid.TryParse(roomId, out var roomGuid)) {
+                return BadRequest();
+            }
+            using var context = _simpleDbContextFactory.CreateContext<DbApiContext>();
+
+            var room = await context.Rooms.FirstOrDefaultAsync(i => i.ID == roomGuid);
+            if (room is null) {
+                return BadRequest();
+            }
+
+            var userIds = room.JoinedUserSessionIds.Split(COMMA_SEPERATOR).Where(i => !string.IsNullOrWhiteSpace(i));
+            if (!userIds.Contains(sessionId, StringComparer.OrdinalIgnoreCase)) {
+                return BadRequest();
+            }
+
+            var newUsers = userIds.ToList();
+            newUsers.Remove(sessionId);
+            room.JoinedUserSessionIds = string.Join(COMMA_SEPERATOR, newUsers);
+            await context.SaveChangesAsync();
+
             return Ok();
         }
     }

@@ -3,7 +3,6 @@ using System.Threading.Tasks;
 
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Net.Http.Headers;
 
 using YoutubeWithFriends.Api.Data;
 using YoutubeWithFriends.Api.Services;
@@ -15,7 +14,6 @@ namespace YoutubeWithFriends.Api.Controllers {
     [ApiController]
     public class UsersController : ControllerBase {
         private const int MAX_ACCOUNTS_UNDER_IP = 5;
-        private const string USER_SESSION_ID_COOKIE_NAME = "userSessionId";
 
         private readonly ISimpleDbContextFactory _simpleDbContextFactory;
         private readonly IIpAddressResolver _ipAddressResolver;
@@ -26,7 +24,8 @@ namespace YoutubeWithFriends.Api.Controllers {
         }
 
         [HttpGet("GetUser")]
-        public async Task<ActionResult<string>> GetUser(string sessionId) {
+        public async Task<ActionResult<string>> GetUser() {
+            var sessionId = Request.Cookies[Program.USER_SESSION_ID_COOKIE_NAME];
             using var context = _simpleDbContextFactory.CreateContext<DbApiContext>();
 
             if (string.IsNullOrWhiteSpace(sessionId)) {
@@ -81,12 +80,13 @@ namespace YoutubeWithFriends.Api.Controllers {
 
             await context.SaveChangesAsync();
 
-            Response.Cookies.Append(USER_SESSION_ID_COOKIE_NAME, sessionId);
+            Response.Cookies.Append(Program.USER_SESSION_ID_COOKIE_NAME, sessionId);
             return Ok();
         }
 
         [HttpDelete("Logout")]
-        public async Task<ActionResult<string>> Logout(string sessionId) {
+        public async Task<ActionResult<string>> Logout() {
+            var sessionId = Request.Cookies[Program.USER_SESSION_ID_COOKIE_NAME];
             using var context = _simpleDbContextFactory.CreateContext<DbApiContext>();
 
             if (string.IsNullOrWhiteSpace(sessionId)) {
@@ -106,7 +106,7 @@ namespace YoutubeWithFriends.Api.Controllers {
             context.Users.Remove(userSession);
             await context.SaveChangesAsync();
 
-            Response.Cookies.Delete(USER_SESSION_ID_COOKIE_NAME);
+            Response.Cookies.Delete(Program.USER_SESSION_ID_COOKIE_NAME);
             return Ok();
         }
     }
